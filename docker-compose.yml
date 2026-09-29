@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: eve
+      POSTGRES_PASSWORD: eve
+      POSTGRES_DB: eve
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eve -d eve"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  migrate:
+    build: .
+    command: alembic upgrade head
+    environment:
+      DATABASE_URL: postgresql+psycopg://eve:eve@postgres:5432/eve
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-change-me-0123456789}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-only-webhook-secret}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://eve:eve@postgres:5432/eve
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-jwt-secret-change-me-0123456789}
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-dev-only-webhook-secret}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
